@@ -1,0 +1,268 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dataTemplate name="XXHADialyExportShipment" description="XXHA Dialy Export Shipment" version="1.0">
+   <parameters>
+	 <!--     <parameter name="p_org_id" datatype="NUMBER"/> -->
+	 <parameter name="p_start_date" datatype="date"/>
+	 <parameter name="p_end_date" datatype="date"/>
+   </parameters>
+  <dataQuery>
+    <sqlStatement name="PDATE"> 
+	    <![CDATA[
+			SELECT 
+				TO_CHAR(TO_DATE(:P_START_DATE,'RRRR/MM/DD HH24:MI:SS'),'DD-MON-RRRR') START_DATE,
+				TO_CHAR(TO_DATE(:P_END_DATE,'RRRR/MM/DD HH24:MI:SS'),'DD-MON-RRRR') END_DATE,
+			    TO_CHAR(SYSDATE,'DD-MON-RRRR HH24:MI') REP_DATE
+			FROM DUAL
+	   ]]>
+	</sqlStatement>
+    <sqlStatement name="EXPTSHIP">
+         <![CDATA[
+SELECT 
+  EXPORT_DATE,
+  INVOICE_NUMBER,
+  BOL_NUMBER,
+  SALE_ORDER_NUMBER,
+  PART_NUMBER,
+  PART_DESCRIPTION,
+  EXPORT_LOCATION,
+  FINAL_DESTNATION_COUNTRY,
+  ECCN,
+  HSS_CODE,
+  COUNTRY_OF_ORIGIN,
+  SUM(VALUE) VALUE,
+  SUM(ORDERED_QUANTITY) ORDERED_QUANTITY,
+  SOLD_TO,
+  SHIP_FROM_LOCATION,
+  SHIP_FROM_ADDRESS,
+  SHIP_TO_LOCATION,
+  SHIP_TO_ADDRESS,
+  INVOICE_TO_ADDRESS,
+  DISTRIBUTOR,
+  END_USER,
+  HEADER_ID,
+  ORG_ID,
+  LINE_ID,
+  LINE_NUMBER,
+--  LOT_NUMBER,
+  ORDERED_DATE,
+  SHIP_FROM_ORG_ID,
+  SHIP_TO_ORG_ID,
+  SOLD_TO_ORG_ID,
+  ACCOUNT_NUMBER
+FROM
+(   SELECT DISTINCT TO_CHAR (DECODE (OOLA.FLOW_STATUS_CODE,
+                 'OPEN', SCHEDULE_SHIP_DATE,
+                 ACTUAL_SHIPMENT_DATE),'DD-MON-RRRR')
+            EXPORT_DATE,
+--         rcta.trx_number invoice_number,            
+         XXHAEXPTSHIP_PKG.GET_INV_NUM(OOLA.LINE_ID,OOHA.ORDER_NUMBER,OOHA.ORG_ID) INVOICE_NUMBER,
+         WND.WAYBILL BOL_NUMBER,
+         ORDER_NUMBER SALE_ORDER_NUMBER,
+         OOLA.ORDERED_ITEM PART_NUMBER,
+         MSIB.DESCRIPTION PART_DESCRIPTION,
+         FTL.TERRITORY_SHORT_NAME EXPORT_LOCATION,
+         FTL1.TERRITORY_SHORT_NAME FINAL_DESTNATION_COUNTRY,
+         NULL ECCN,
+         NULL HSS_CODE,
+         MMT.C_ATTRIBUTE1 COUNTRY_OF_ORIGIN,
+--         (oola.UNIT_SELLING_PRICE * oola.ordered_quantity) VALUE,
+--         oola.ordered_quantity,
+         (OOLA.UNIT_SELLING_PRICE * WDD.REQUESTED_QUANTITY) VALUE,
+         (WDD.REQUESTED_QUANTITY) ORDERED_QUANTITY,
+         PARTY.PARTY_NAME SOLD_TO,
+        (SELECT DISTINCT HL.LOCATION_CODE 
+        FROM HR_LOCATIONS HL,
+          WSH_DELIVERABLES_V WDV
+        WHERE HL.LOCATION_ID=WDV.SHIP_FROM_LOCATION_ID
+        AND WDV.DELIVERY_ID =WND.DELIVERY_ID
+        ) SHIP_FROM_LOCATION,
+        (SELECT DISTINCT HL.ADDRESS_LINE_1
+          ||', '
+          ||HL.ADDRESS_LINE_2
+          ||', '
+          ||TOWN_OR_CITY
+          ||', '
+          ||HL.POSTAL_CODE
+          ||', '
+          ||HL.COUNTRY
+        FROM HR_LOCATIONS HL,
+          WSH_DELIVERABLES_V WDV
+        WHERE HL.LOCATION_ID=WDV.SHIP_FROM_LOCATION_ID
+        AND WDV.DELIVERY_ID =WND.DELIVERY_ID
+        ) SHIP_FROM_ADDRESS,  
+         SHIP_SU.LOCATION SHIP_TO_LOCATION,     
+            SHIP_LOC.ADDRESS1
+         || ', '
+         || SHIP_LOC.ADDRESS2
+         || ', '
+         || SHIP_LOC.ADDRESS3
+         || ', '
+         || SHIP_LOC.ADDRESS4
+         || ', '
+         || DECODE (SHIP_LOC.CITY, NULL, NULL, SHIP_LOC.CITY || ', ')
+         || DECODE (SHIP_LOC.STATE,
+                    NULL, SHIP_LOC.PROVINCE || ', ',
+                    SHIP_LOC.STATE || ', ')
+         || DECODE (SHIP_LOC.POSTAL_CODE,
+                    NULL, NULL,
+                    SHIP_LOC.POSTAL_CODE || ', ')
+         || DECODE (SHIP_LOC.COUNTRY, NULL, NULL, SHIP_LOC.COUNTRY)
+            SHIP_TO_ADDRESS,
+            BILL_SU.LOCATION
+         || ', '
+         || BILL_SU.LOCATION
+         || ', '
+         || BILL_LOC.ADDRESS1
+         || ', '
+         || BILL_LOC.ADDRESS2
+         || ', '
+         || BILL_LOC.ADDRESS3
+         || ', '
+         || BILL_LOC.ADDRESS4
+         || ', '
+         || DECODE (BILL_LOC.CITY, NULL, NULL, BILL_LOC.CITY || ', ')
+         || DECODE (BILL_LOC.STATE,
+                    NULL, BILL_LOC.PROVINCE || ', ',
+                    BILL_LOC.STATE || ', ')
+         || DECODE (BILL_LOC.POSTAL_CODE,
+                    NULL, NULL,
+                    BILL_LOC.POSTAL_CODE || ', ')
+         || DECODE (BILL_LOC.COUNTRY, NULL, NULL, BILL_LOC.COUNTRY)
+            INVOICE_TO_ADDRESS,
+         PARTY.PARTY_NAME DISTRIBUTOR,        
+         NULL END_USER,
+         OOHA.HEADER_ID,
+         OOHA.ORG_ID,
+         OOLA.LINE_ID,
+         OOLA.LINE_NUMBER,
+         WDD.LOT_NUMBER,
+         TO_CHAR(OOHA.ORDERED_DATE,'DD-MON-RRRR') ORDERED_DATE,
+         OOHA.SHIP_FROM_ORG_ID,
+         OOHA.SHIP_TO_ORG_ID,
+         OOHA.SOLD_TO_ORG_ID,
+         CUST_ACCT.ACCOUNT_NUMBER
+    FROM OE_ORDER_HEADERS_ALL OOHA,
+         OE_ORDER_LINES_ALL OOLA,
+         MTL_SYSTEM_ITEMS_B MSIB,
+--         ra_customer_trx_all rcta,
+--         ra_customer_Trx_lines_all rctla,
+         FND_TERRITORIES_TL FTL,
+         FND_TERRITORIES_TL FTL1,
+         HZ_CUST_SITE_USES_ALL SHIP_SU,
+         HZ_PARTY_SITES SHIP_PS,
+         HZ_LOCATIONS SHIP_LOC,
+         HZ_CUST_ACCT_SITES_ALL SHIP_CAS,
+         HZ_CUST_SITE_USES_ALL BILL_SU,
+         HZ_PARTY_SITES BILL_PS,
+         HZ_LOCATIONS BILL_LOC,
+         HZ_CUST_ACCT_SITES_ALL BILL_CAS,
+         HZ_PARTIES PARTY,
+         HZ_CUST_ACCOUNTS CUST_ACCT,
+         WSH_DELIVERY_DETAILS WDD,
+         WSH_DELIVERY_ASSIGNMENTS WDA,
+         MTL_TRANSACTION_LOT_NUMBERS MMT,
+         WSH_NEW_DELIVERIES WND,
+         HR_ORGANIZATION_UNITS_V HOU        
+   WHERE     1 = 1
+--         AND order_number IN ('5019444')
+         AND OOHA.HEADER_ID = OOLA.HEADER_ID
+         AND OOLA.CANCELLED_FLAG = 'N'
+         AND MSIB.SEGMENT1 = OOLA.ORDERED_ITEM
+         AND OOHA.SHIP_FROM_ORG_ID = MSIB.ORGANIZATION_ID
+--         AND rctla.interface_line_attribute6 = TO_CHAR (oola.line_id)
+--         AND rcta.customer_trx_id = rctla.customer_trx_id
+--         AND rcta.interface_header_attribute1 = TO_CHAR (ooha.order_number)
+--         AND rcta.ct_reference = TO_CHAR (ooha.order_number)
+--         AND rcta.org_id = ooha.org_id
+         AND OOLA.SHIP_FROM_ORG_ID = HOU.ORGANIZATION_ID(+)
+         AND FTL.TERRITORY_CODE = HOU.COUNTRY
+         AND FTL.LANGUAGE = 'US'
+         AND FTL1.TERRITORY_CODE = SHIP_LOC.COUNTRY
+         AND FTL1.LANGUAGE = 'US'
+         AND OOLA.SHIP_TO_ORG_ID = SHIP_SU.SITE_USE_ID(+)
+         AND SHIP_SU.CUST_ACCT_SITE_ID = SHIP_CAS.CUST_ACCT_SITE_ID(+)
+         AND SHIP_CAS.PARTY_SITE_ID = SHIP_PS.PARTY_SITE_ID(+)
+         AND SHIP_LOC.LOCATION_ID(+) = SHIP_PS.LOCATION_ID
+         AND OOHA.INVOICE_TO_ORG_ID = BILL_SU.SITE_USE_ID(+)
+         AND BILL_SU.CUST_ACCT_SITE_ID = BILL_CAS.CUST_ACCT_SITE_ID(+)
+         AND BILL_CAS.PARTY_SITE_ID = BILL_PS.PARTY_SITE_ID(+)
+         AND BILL_LOC.LOCATION_ID(+) = BILL_PS.LOCATION_ID
+         AND OOHA.SOLD_TO_ORG_ID = CUST_ACCT.CUST_ACCOUNT_ID(+)
+         AND CUST_ACCT.PARTY_ID = PARTY.PARTY_ID(+)
+         AND WDD.SOURCE_LINE_ID = OOLA.LINE_ID
+         AND WDD.SOURCE_CODE = 'OE'
+         AND WDD.RELEASED_STATUS <> 'D'
+         AND WDD.DELIVERY_DETAIL_ID = WDA.DELIVERY_DETAIL_ID
+         AND MMT.TRANSACTION_ID(+) = WDD.TRANSACTION_ID
+         AND WDA.DELIVERY_ID = WND.DELIVERY_ID
+--		AND trunc(ooha.ordered_date) BETWEEN trunc(NVL(TO_DATE (:p_Start_Date,'RRRR/MM/DD HH24:MI:SS'),trunc(ooha.ordered_date))) AND trunc( NVL(TO_DATE (:p_end_Date,'RRRR/MM/DD HH24:MI:SS'),trunc(ooha.ordered_date)))
+)    
+WHERE TRUNC(TO_DATE(EXPORT_DATE,'DD-MON-RRRR')) BETWEEN TRUNC(NVL(TO_DATE (:P_START_DATE,'YYYY/MM/DD HH24:MI:SS'),TO_DATE(EXPORT_DATE,'DD-MON-RRRR'))) AND TRUNC( NVL(TO_DATE (:P_END_DATE,'YYYY/MM/DD HH24:MI:SS'),TO_DATE(EXPORT_DATE,'DD-MON-RRRR')))    
+GROUP BY
+  EXPORT_DATE,
+  INVOICE_NUMBER,
+  BOL_NUMBER,
+  SALE_ORDER_NUMBER,
+  PART_NUMBER,
+  PART_DESCRIPTION,
+  EXPORT_LOCATION,
+  FINAL_DESTNATION_COUNTRY,
+  ECCN,
+  HSS_CODE,
+  COUNTRY_OF_ORIGIN,
+--  VALUE,
+--  ORDERED_QUANTITY,
+  SOLD_TO,
+  SHIP_FROM_LOCATION,
+  SHIP_FROM_ADDRESS,
+  SHIP_TO_LOCATION,
+  SHIP_TO_ADDRESS,
+  INVOICE_TO_ADDRESS,
+  DISTRIBUTOR,
+  END_USER,
+  HEADER_ID,
+  ORG_ID,
+  LINE_ID,
+  LINE_NUMBER,
+--  LOT_NUMBER,
+  ORDERED_DATE,
+  SHIP_FROM_ORG_ID,
+  SHIP_TO_ORG_ID,
+  SOLD_TO_ORG_ID,
+  ACCOUNT_NUMBER
+ORDER BY ORDERED_DATE,SALE_ORDER_NUMBER, LINE_NUMBER
+	   ]]>
+    </sqlStatement>
+  </dataQuery> 
+  <dataStructure>
+    <group name="G_PDATE" source="PDATE">  
+	  <element name="START_DATE" value="START_DATE"/>
+	  <element name="END_DATE" value="END_DATE"/>	
+	  <element name="REP_DATE" value="REP_DATE"/> 
+    </group>	
+    <group name="G_EXPTSHIP" source="EXPTSHIP">
+	  <element name="EXPORT_DATE" value="EXPORT_DATE"/>
+	  <element name="ORDERED_DATE" value="ORDERED_DATE"/>	  
+      <element name="INVOICE_NUMBER" value="INVOICE_NUMBER"/>
+	  <element name="BOL_NUMBER" value="BOL_NUMBER"/>
+	  <element name="SALE_ORDER_NUMBER" value="SALE_ORDER_NUMBER"/>
+	  <element name="PART_NUMBER" value="PART_NUMBER"/>
+	  <element name="PART_DESCRIPTION" value="PART_DESCRIPTION"/>
+	  <element name="EXPORT_LOCATION" value="EXPORT_LOCATION"/>
+	  <element name="FINAL_DESTNATION_COUNTRY" value="FINAL_DESTNATION_COUNTRY"/>	  
+	  <element name="ECCN" value="ECCN"/>
+	  <element name="HSS_CODE" value="HSS_CODE"/>	
+	  <element name="COUNTRY_OF_ORIGIN" value="COUNTRY_OF_ORIGIN"/>	 
+	  <element name="VALUE" value="VALUE"/>
+	  <element name="ORDERED_QUANTITY" value="ORDERED_QUANTITY"/>	
+	  <element name="SOLD_TO" value="SOLD_TO"/>	 
+	  <element name="SHIP_FROM_LOCATION" value="SHIP_FROM_LOCATION"/>
+	  <element name="SHIP_FROM_ADDRESS" value="SHIP_FROM_ADDRESS"/>	  
+	  <element name="SHIP_TO_LOCATION" value="SHIP_TO_LOCATION"/>
+	  <element name="SHIP_TO_ADDRESS" value="SHIP_TO_ADDRESS"/>
+	  <element name="DISTRIBUTOR" value="DISTRIBUTOR"/>
+	  <element name="END_USER" value="END_USER"/>
+	  <element name="INVOICE_TO_ADDRESS" value="INVOICE_TO_ADDRESS"/>
+    </group>
+  </dataStructure>
+</dataTemplate>
