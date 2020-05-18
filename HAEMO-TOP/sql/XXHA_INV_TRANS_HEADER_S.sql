@@ -1,0 +1,4 @@
+DROP SEQUENCE xxha_inv_Trans_header_s
+/
+CREATE SEQUENCE xxha_inv_Trans_header_s
+START WITH 1000 INCREMENT BY 1 NOCACHE NOCYCLE ORDER
