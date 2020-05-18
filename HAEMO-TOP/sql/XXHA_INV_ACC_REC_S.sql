@@ -1,0 +1,5 @@
+DROP SEQUENCE xxha_inv_acc_rec_s
+/
+CREATE SEQUENCE xxha_inv_acc_rec_s
+START WITH 1 INCREMENT BY 1 NOCACHE NOCYCLE ORDER
+/
