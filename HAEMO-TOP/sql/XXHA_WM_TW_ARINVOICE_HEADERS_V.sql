@@ -1,5 +1,15 @@
 
-  CREATE OR REPLACE FORCE VIEW "APPS"."XXHA_WM_TW_ARINVOICE_HEADERS_V" ("WEB_TRANSACTION_ID", "DOCUMENT_TYPE", "DOCUMENT_STATUS", "CUSTOMER_TRX_ID", "TRX_NUMBER", "TRX_DATE", "INVOICE_CURRENCY_CODE", "TRX_TYPE", "TW_INVOICE_TYPE", "PREVIOUS_TRX_NUMBER", "TERMS_NAME", "TERMS_DESCRIPTION", "TERMS_DUE_DAYS", "HEADER_ATTRIBUTE_CATEGORY", "ORDER_NUMBER", "ORDER_TYPE", "ORIG_SYS_DOCUMENT_REF", "CUST_PO_NUMBER", "ORDERED_DATE", "DELIVERY_NAME", "OU_ORGANIZATION_NAME", "OU_ORGANIZATION_ID", "OU_CODE", "SENDER_ID", "SENDER_NAME", "INVOICING_TYPE", "INVOICE_DUE_DATE", "BILL_TO_SITE_NUMBER", "BILL_TO_ACCOUNT_NUMBER", "BILL_TO_CUSTOMER_NAME", "BILL_TO_TAX_ID", "BILL_TO_ADDRESS1", "BILL_TO_ADDRESS2", "BILL_TO_ADDRESS3", "BILL_TO_ADDRESS4", "BILL_TO_CITY", "BILL_TO_REGION", "BILL_TO_POSTAL_CODE", "BILL_TO_COUNTRY", "SHIP_TO_SITE_NUMBER", "SHIP_TO_ACCOUNT_NUMBER", "SHIP_TO_CUSTOMER_NAME", "SHIP_TO_ADDRESS1", "SHIP_TO_ADDRESS2", "SHIP_TO_ADDRESS3", "SHIP_TO_ADDRESS4", "SHIP_TO_CITY", "SHIP_TO_REGION", "SHIP_TO_POSTAL_CODE", "SHIP_TO_COUNTRY", "HAEMO_TAX_ID", "REMIT_TO_ADDRESS1", "REMIT_TO_ADDRESS2", "REMIT_TO_ADDRESS3", "REMIT_TO_CITY", "REMIT_TO_REGION", "REMIT_TO_POSTAL_CODE", "REMIT_TO_COUNTRY", "CHECK_DIGIT") AS 
+  CREATE OR REPLACE FORCE VIEW "APPS"."XXHA_WM_TW_ARINVOICE_HEADERS_V" ("WEB_TRANSACTION_ID", "DOCUMENT_TYPE", "DOCUMENT_STATUS", "CUSTOMER_TRX_ID", "TRX_NUMBER", 
+  "TRX_DATE", "INVOICE_CURRENCY_CODE", "TRX_TYPE", "TW_INVOICE_TYPE", "PREVIOUS_TRX_NUMBER", "TERMS_NAME", "TERMS_DESCRIPTION", "TERMS_DUE_DAYS", 
+  "HEADER_ATTRIBUTE_CATEGORY", "ORDER_NUMBER", "ORDER_TYPE", 
+  "ORIG_SYS_DOCUMENT_REF", "CUST_PO_NUMBER", "ORDERED_DATE", "DELIVERY_NAME", "OU_ORGANIZATION_NAME", "OU_ORGANIZATION_ID", "OU_CODE", "SENDER_ID", "SENDER_NAME",
+  "SENDER_ADDRESS", "INVOICING_TYPE", "INVOICE_DUE_DATE",
+  "BILL_TO_SITE_NUMBER", "BILL_TO_ACCOUNT_NUMBER", "BILL_TO_CUSTOMER_NAME", "BILL_TO_TAX_ID", "BILL_TO_ADDRESS1", "BILL_TO_ADDRESS2", "BILL_TO_ADDRESS3", "BILL_TO_ADDRESS4", 
+  "BILL_TO_CITY", "BILL_TO_REGION", "BILL_TO_POSTAL_CODE", "BILL_TO_COUNTRY",
+  "SHIP_TO_SITE_NUMBER", "SHIP_TO_ACCOUNT_NUMBER", "SHIP_TO_CUSTOMER_NAME", "SHIP_TO_ADDRESS1", "SHIP_TO_ADDRESS2", "SHIP_TO_ADDRESS3", "SHIP_TO_ADDRESS4", 
+  "SHIP_TO_CITY", "SHIP_TO_REGION", "SHIP_TO_POSTAL_CODE", "SHIP_TO_COUNTRY",
+  "HAEMO_TAX_ID", "REMIT_TO_ADDRESS1", "REMIT_TO_ADDRESS2", "REMIT_TO_ADDRESS3", "REMIT_TO_CITY", "REMIT_TO_REGION", "REMIT_TO_POSTAL_CODE", "REMIT_TO_COUNTRY",
+  "CHECK_DIGIT", "TW_TAX_TYPE", "TW_CUSTOMS_CLEARANCE_MARK") AS 
   SELECT wmtc.web_transaction_id,
     wmtc.transaction_type document_type,
     DECODE((wmtc.transaction_status), 0, 'UPDATE', 1, 'INSERT', 2, 'DELETE') document_status,
@@ -29,15 +39,19 @@
         else NULL 
     end sender_id,
     CASE org.short_code
-        WHEN 'TW' then 'TBD'
+        WHEN 'TW' then '美商良衞股份有限公司台灣分公司'
         else null
     end sender_name,
+    CASE org.short_code
+        WHEN 'TW' then '台北市中正區羅斯福路二段102號26樓之一'
+        else null
+    end sender_address,
     cas.attribute1 invoicing_type,
     nvl((SELECT MIN(ps2.due_date) FROM ar_payment_schedules_all ps2 where ps2.customer_trx_id = CT.CUSTOMER_TRX_ID), arpt_sql_func_util.get_first_due_date(CT.TERM_ID, nvl(ct.billing_date, CT.TRX_DATE))) invoice_due_date,
     hps.party_site_number bill_to_site_number,
     hca.account_number bill_to_account_number,
     hp.party_name bill_to_customer_name,
-    csu.tax_reference,
+    CASE WHEN OT.NAME LIKE '%Internal%' THEN '00000000' ELSE csu.tax_reference END BILL_TO_TAX_ID,
     hl.address1 bill_to_Address1,
     hl.address2 bill_to_address2,
     hl.address3 bill_to_address3,
@@ -70,7 +84,9 @@
     NVL(RAA_REMIT_LOC.STATE , RAA_REMIT_LOC.PROVINCE),
     RAA_REMIT_LOC.POSTAL_CODE ,
     RAA_REMIT_LOC.COUNTRY,
-    XXHA_TW_INV_CHECK_DIGIT.PROCESS_DATA(LPAD(SUBSTR(ct.trx_number,3,8),8,'0')) CHECK_DIGIT
+    XXHA_TW_INV_CHECK_DIGIT.PROCESS_DATA(LPAD(SUBSTR(ct.trx_number,3,8),8,'0')) CHECK_DIGIT,
+    CASE WHEN OT.NAME LIKE '%Internal%' THEN '2' ELSE '1' END TW_TAX_TYPE,
+    CASE WHEN ct.interface_header_context = 'ORDER ENTRY' THEN wnd.attribute7 ELSE NULL END TW_CUSTOMS_CLEARANCE_MARK
   FROM ra_customer_trx_all ct,
     ra_cust_trx_types_all cty,
     oe_order_headers_all oh,
@@ -106,7 +122,8 @@
       rt.term_id = rtt.term_id
       and rtt.language = 'US' -- in the future this may be customer language or OU language
       and rt.term_id = rtl.term_id(+)
-    ) terms
+    ) terms,
+    wsh_new_deliveries wnd
   WHERE ct.cust_trx_type_id = cty.cust_trx_type_id(+)
   AND ct.org_id             = cty.org_id(+)
 --  AND ct.interface_header_context    = 'ORDER ENTRY'
@@ -137,6 +154,7 @@
   AND RAA_REMIT_LOC.LOCATION_ID(+) = RAA_REMIT_PS.LOCATION_ID
   AND ct.previous_customer_trx_id  = prev_ct.customer_trx_id(+)
   and ct.TERM_ID                   = terms.term_id(+)
+  and ct.interface_header_attribute3 = to_char(wnd.delivery_id(+))
   AND org.short_code='TW'
   AND cty.name in ('TW31-TRI-COMP-GUI','TW32-DUP-CASH-GUI','TW Credit Memo')
   AND ct.invoice_currency_code='TWD'

@@ -1,5 +1,5 @@
 
-  CREATE OR REPLACE FORCE VIEW "APPS"."XXHA_WM_TW_ARINVOICE_LINES_VW" ("CUSTOMER_TRX_LINE_ID", "CUSTOMER_TRX_ID", "LINE_NUMBER", "DELIVERY_NAME", "BILLED_FROM_DATE", "BILLED_TO_DATE", "INVENTORY_ITEM", "ITEM_DESCRIPTION", "GTIN", "UNIT_SELLING_PRICE", "UNIT_STANDARD_PRICE", "QUANTITY", "UOM_CODE", "QUANTITY_DELIVERED", "QUANTITY_DELIVERED_UOM", "UNIT_QUANTITY", "UNIT_QUANTITY_UOM", "EXTENDED_AMOUNT", "ORIG_SYS_LINE_REF") AS 
+  CREATE OR REPLACE FORCE VIEW "APPS"."XXHA_WM_TW_ARINVOICE_LINES_VW" ("CUSTOMER_TRX_LINE_ID", "CUSTOMER_TRX_ID", "LINE_NUMBER", "DELIVERY_NAME", "BILLED_FROM_DATE", "BILLED_TO_DATE", "INVENTORY_ITEM", "ITEM_DESCRIPTION", "ZHT_ITEM_DESCRIPTION", "GTIN", "UNIT_SELLING_PRICE", "UNIT_STANDARD_PRICE", "QUANTITY", "UOM_CODE", "QUANTITY_DELIVERED", "QUANTITY_DELIVERED_UOM", "UNIT_QUANTITY", "UNIT_QUANTITY_UOM", "EXTENDED_AMOUNT", "ORIG_SYS_LINE_REF") AS 
   SELECT 
   ctl.customer_trx_line_id,
   ctl.customer_trx_id,
@@ -9,6 +9,7 @@
   case when ctl.interface_line_context = 'OKS CONTRACTS' then TO_DATE(ctl.interface_line_attribute5,'YYYY/MM/DD') else null end billed_to_date,
   msib.segment1 AS inventory_item,
   msib.description AS ITEM_DESCRIPTION, -- Eric Rossing - 7/2/2015 - add Item Description to query
+  msit.description AS ZHT_ITEM_DESCRIPTION,
   decode (ctl.uom_code, 'Ca', xxha_robar_pkg.gtin_number(ctl.inventory_item_id, 3), 'Ea', xxha_robar_pkg.gtin_number(ctl.inventory_item_id, 1)) gtin,
   ctl.unit_selling_price,
   ctl.unit_standard_price,
@@ -30,6 +31,7 @@ FROM ra_customer_trx_lines_all ctl,
   oe_order_lines_all ol,
 --  oe_order_headers_all oh,
   mtl_system_items_b msib, -- Eric Rossing - 7/2/2015 - add Item Description to query
+  mtl_system_items_tl msit,
   mtl_uom_conversions muc
 WHERE ctl.customer_trx_id = ct.customer_trx_id
  AND ct.cust_trx_type_id = ctt.cust_trx_type_id
@@ -41,6 +43,9 @@ WHERE ctl.customer_trx_id = ct.customer_trx_id
  AND ctl.line_type = 'LINE'
  AND ctl.inventory_item_id = msib.inventory_item_id(+) -- Eric Rossing - 7/2/2015 - add Item Description to query -- 2/26/2016 - link to Trx Line, not Order Line
  AND msib.organization_id(+)=103                      -- Eric Rossing - 7/2/2015 - add Item Description to query -- 2/26/2016 - link to Trx Line, not Order Line
+ and msib.inventory_item_id = msit.inventory_item_id(+)
+ and msit.organization_id(+)=103
+ and msit.language(+) = 'ZHT'
  AND ctl.inventory_item_id = muc.inventory_item_id(+)
  and ctl.uom_code = muc.uom_code(+)
 ORDER BY ctl.line_number;
