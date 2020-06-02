@@ -1,0 +1,4 @@
+update po_distributions_all set req_distribution_id=1 where po_header_id = 225468 and   req_distribution_id IS NULL;
+/
+commit;
+/
