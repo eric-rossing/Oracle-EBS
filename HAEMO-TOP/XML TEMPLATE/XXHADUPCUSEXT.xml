@@ -1,0 +1,197 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<dataTemplate name="XXHADuplicateCustomerExtract" description="XXHA Open Transactions count for customer master" version="1.0">
+     <dataQuery>
+    <sqlStatement name="DUPLICATE_CUSTOMER">
+         <![CDATA[
+	select
+        hca.cust_account_id,hca.account_number customer_number,hca.status cust_account_status,hp.party_id,hp.party_number,hp.party_name,hp.party_type,hp.category_code,hp.status party_status,hca.customer_type,
+         hca.customer_class_code,hps.party_site_id,hps.party_site_number,hps.status party_site_status,hcas.cust_acct_site_id,hl.location_id,hl.address1,hl.address2,hl.address3,hl.address4,hl.city,
+         hl.postal_code,hl.state,hl.province,hl.country,hou.name operating_unit,hcsu.site_use_id cust_site_use_id,hcsu.site_use_code,hcsu.location site_use_location,hcsu.status cust_site_use_status,
+        (select count(1)
+            from oe_order_headers_all
+           where ship_to_org_id = xccd.site_use_id
+               and flow_status_code NOT IN ('CLOSED','CANCELLED')) count_open_so_ship_to,
+       (select count(1)
+            from oe_order_headers_all
+           where invoice_to_org_id = xccd.site_use_id
+               and flow_status_code NOT IN ('CLOSED','CANCELLED')) count_open_so_bill_to,        
+       (select count(1)
+            from oe_order_headers_all
+           where sold_to_org_id = hca.cust_account_id
+               and flow_status_code NOT IN ('CLOSED','CANCELLED')) count_open_so_cust_account,
+        (select count(1)
+            from oe_order_headers_all
+           where ship_to_org_id = xccd.site_use_id
+               and flow_status_code IN ('CLOSED','CANCELLED')
+               and trunc(creation_date) >= TRUNC (ADD_MONTHS (SYSDATE, -12))) count_closed_so_ship_to,
+       (select count(1)
+            from oe_order_headers_all
+           where invoice_to_org_id = xccd.site_use_id
+               and flow_status_code IN ('CLOSED','CANCELLED')
+               and trunc(creation_date) >= TRUNC (ADD_MONTHS (SYSDATE, -12))) count_closed_so_bill_to,        
+       (select count(1)
+            from oe_order_headers_all
+           where sold_to_org_id = hca.cust_account_id
+               and flow_status_code IN ('CLOSED','CANCELLED')
+               and trunc(creation_date) >= TRUNC (ADD_MONTHS (SYSDATE, -12))) count_closed_so_cust_account,        
+     (select count(1)
+            from oe_blanket_headers_all
+           where ship_to_org_id = xccd.site_use_id
+               and flow_status_code NOT IN ('CLOSED','TERMINATED','EXPIRED')) count_open_bsa_ship_to,
+       (select count(1)
+            from oe_blanket_headers_all
+           where invoice_to_org_id = xccd.site_use_id
+               and flow_status_code NOT IN ('CLOSED','TERMINATED','EXPIRED')) count_open_bsa_bill_to,        
+       (select count(1)
+            from oe_blanket_headers_all
+           where sold_to_org_id = hca.cust_account_id
+               and flow_status_code NOT IN ('CLOSED','TERMINATED','EXPIRED')) count_open_bsa_cust_account,
+      (select count(1)
+            from ra_customer_trx_all rct,ar_payment_schedules_all apsa
+           where rct.sold_to_customer_id = hca.cust_account_id
+               and rct.ship_to_site_use_id = xccd.site_use_id
+               and rct.customer_trx_id = apsa.customer_trx_id
+               and apsa.amount_due_remaining > 0) count_open_ar_ship_to,
+       (select count(1)
+            from ra_customer_trx_all rct,ar_payment_schedules_all apsa
+           where rct.sold_to_customer_id = hca.cust_account_id
+               and rct.bill_to_site_use_id = xccd.site_use_id
+               and rct.customer_trx_id = apsa.customer_trx_id
+               and apsa.amount_due_remaining > 0) count_open_ar_bill_to,
+        (select count(1)
+            from ra_customer_trx_all rct,ar_payment_schedules_all apsa
+           where rct.sold_to_customer_id = hca.cust_account_id
+               and rct.customer_trx_id = apsa.customer_trx_id
+               and apsa.amount_due_remaining > 0) count_open_ar_account,           
+      (select count(1)
+            from cs_incidents_all_b ciab
+          where ciab.ship_to_site_id = xccd.party_site_id
+               and ciab.status_flag = 'O') count_open_sr_party_site_ship,
+      (select count(1)
+            from cs_incidents_all_b ciab
+           where ciab.bill_to_site_id = xccd.party_site_id
+               and ciab.status_flag = 'O') count_open_sr_party_site_bill,
+      (select count(1)
+         from okc_k_headers_all_b 
+       where bill_to_site_use_id = xccd.site_use_id
+           and sts_code in ('ENTERED','ACTIVE','SIGNED','QA_HOLD')) count_open_contract_bill_to,
+      (select count(1)
+         from okc_k_headers_all_b 
+       where ship_to_site_use_id = xccd.site_use_id 
+           and sts_code in ('ENTERED','ACTIVE','SIGNED','QA_HOLD')) count_open_contract_ship_to,    
+      (select count(1)
+         from pa_projects_all ppa,pa_project_customers ppc
+       where ppa.project_id = ppc.project_id
+           and ppc.bill_to_address_id = xccd.cust_acct_site_id
+           and project_status_code in ('APPROVED','UNAPPROVED','SUBMITTED','PENDING_CLOSE')) count_open_projects_bill_to,  
+      (select count(1)
+         from pa_projects_all ppa,pa_project_customers ppc
+       where ppa.project_id = ppc.project_id
+           and ppc.ship_to_address_id = xccd.cust_acct_site_id
+           and project_status_code in ('APPROVED','UNAPPROVED','SUBMITTED','PENDING_CLOSE')) count_open_projects_ship_to,
+       (select count(1) from
+                (select hps.party_site_id
+                   from csi_item_instances cii,hz_party_sites hps
+                 where cii.location_type_code ='HZ_LOCATIONS'
+                    and cii.location_id = hps.location_id
+                union all
+                select location_id
+                  from csi_item_instances
+                where location_type_code ='HZ_PARTY_SITES')
+            where party_site_id = xccd.party_site_id ) count_ib_party_site,
+        (select count(1)
+           from csi_item_instances cii,csi_i_parties cip,csi_ip_accounts cia
+           where cip.instance_party_id = cia.instance_party_id
+            and cii.instance_id = cip.instance_id
+            and location_type_code in ('HZ_PARTY_SITES','HZ_LOCATIONS')
+            and cip.relationship_type_code = 'OWNER'
+            and cia.ship_to_address = hcsu.site_use_id) count_ib_ship_to,
+         (select count(1)
+           from csi_item_instances cii,csi_i_parties cip,csi_ip_accounts cia
+           where cip.instance_party_id = cia.instance_party_id
+            and cii.instance_id = cip.instance_id
+            and location_type_code in ('HZ_PARTY_SITES','HZ_LOCATIONS')
+            and cip.relationship_type_code = 'OWNER'
+            and cia.bill_to_address = hcsu.site_use_id) count_ib_bill_to,
+         (select count(1) from
+                (select hps.party_site_id
+                   from csi_item_instances cii,hz_party_sites hps
+                 where cii.install_location_type_code ='HZ_LOCATIONS'
+                    and cii.install_location_id = hps.location_id
+                union all
+                select install_location_id
+                  from csi_item_instances
+                where install_location_type_code ='HZ_PARTY_SITES')
+             where party_site_id = xccd.party_site_id
+            ) count_ib_install_location           
+from hz_cust_accounts hca,hz_parties hp,hz_cust_acct_sites_all hcas,hz_party_sites hps,hz_locations hl,hz_cust_site_uses_all hcsu,xxha_Cust_cleanup_loading xccd,hr_operating_units hou
+where hca.cust_account_id = hcas.cust_account_id
+    and hca.party_id = hp.party_id
+    and hcas.cust_acct_site_id = hcsu.cust_acct_site_id
+    and hcas.party_site_id = hps.party_site_id
+    and hps.location_id = hl.location_id
+    and hcsu.site_use_id = xccd.site_use_id 
+    and hcas.org_id = hou.organization_id
+--   and xccd.site_use_code = 'INSTALL_AT'
+--   and hcas.cust_acct_site_id = 54202
+--   and xccd.cust_site_use_id = 141188
+	   ]]>
+    </sqlStatement>
+  </dataQuery> 
+  <dataStructure>
+    <group name="G_DUPLICATE_CUSTOMER" source="DUPLICATE_CUSTOMER">
+	  <element name="CUST_ACCOUNT_ID" value="CUST_ACCOUNT_ID"/>
+          <element name="CUSTOMER_NUMBER" value="CUSTOMER_NUMBER"/>
+	  <element name="CUST_ACCOUNT_STATUS" value="CUST_ACCOUNT_STATUS"/>
+	  <element name="PARTY_ID" value="PARTY_ID"/>
+	  <element name="PARTY_NUMBER" value="PARTY_NUMBER"/>
+	  <element name="PARTY_NAME" value="PARTY_NAME"/>
+	  <element name="PARTY_TYPE" value="PARTY_TYPE"/>
+	  <element name="CATEGORY_CODE" value="CATEGORY_CODE"/>	  
+	  <element name="PARTY_STATUS" value="PARTY_STATUS"/>
+	  <element name="CUSTOMER_TYPE" value="CUSTOMER_TYPE"/>	
+	  <element name="CUSTOMER_CLASS_CODE" value="CUSTOMER_CLASS_CODE"/>	 
+	  <element name="PARTY_SITE_ID" value="PARTY_SITE_ID"/>
+	  <element name="PARTY_SITE_NUMBER" value="PARTY_SITE_NUMBER"/>
+	  <element name="PARTY_SITE_STATUS" value="PARTY_SITE_STATUS"/>
+	  <element name="CUST_ACCT_SITE_ID" value="CUST_ACCT_SITE_ID"/>
+	  <element name="OPERATING_UNIT" value="OPERATING_UNIT"/>
+	  <element name="LOCATION_ID" value="LOCATION_ID"/>
+	  <element name="ADDRESS1" value="ADDRESS1"/>
+          <element name="ADDRESS2" value="ADDRESS2"/>
+	  <element name="ADDRESS3" value="ADDRESS3"/>
+	  <element name="ADDRESS4" value="ADDRESS4"/>
+	  <element name="CITY" value="CITY"/>
+	  <element name="POSTAL_CODE" value="POSTAL_CODE"/>
+	  <element name="STATE" value="STATE"/>
+	  <element name="PROVINCE" value="PROVINCE"/>	  
+	  <element name="COUNTRY" value="COUNTRY"/>
+	  <element name="CUST_SITE_USE_ID" value="CUST_SITE_USE_ID"/>	
+	  <element name="SITE_USE_CODE" value="SITE_USE_CODE"/>	 
+	  <element name="SITE_USE_LOCATION" value="SITE_USE_LOCATION"/>
+	  <element name="CUST_SITE_USE_STATUS" value="CUST_SITE_USE_STATUS"/>
+	  <element name="COUNT_OPEN_SO_SHIP_TO" value="COUNT_OPEN_SO_SHIP_TO"/>
+	  <element name="COUNT_OPEN_SO_BILL_TO" value="COUNT_OPEN_SO_BILL_TO"/>
+	  <element name="COUNT_OPEN_SO_CUST_ACCOUNT" value="COUNT_OPEN_SO_CUST_ACCOUNT"/>
+	  <element name="COUNT_CLOSED_SO_SHIP_TO" value="COUNT_CLOSED_SO_SHIP_TO"/>
+	  <element name="COUNT_CLOSED_SO_BILL_TO" value="COUNT_CLOSED_SO_BILL_TO"/>
+	  <element name="COUNT_CLOSED_SO_CUST_ACCOUNT" value="COUNT_CLOSED_SO_CUST_ACCOUNT"/>
+	  <element name="COUNT_OPEN_BSA_SHIP_TO" value="COUNT_OPEN_BSA_SHIP_TO"/>
+	  <element name="COUNT_OPEN_BSA_BILL_TO" value="COUNT_OPEN_BSA_BILL_TO"/>
+	  <element name="COUNT_OPEN_BSA_CUST_ACCOUNT" value="COUNT_OPEN_BSA_CUST_ACCOUNT"/>
+	  <element name="COUNT_OPEN_AR_SHIP_TO" value="COUNT_OPEN_AR_SHIP_TO"/>
+	  <element name="COUNT_OPEN_AR_BILL_TO" value="COUNT_OPEN_AR_BILL_TO"/>
+	  <element name="COUNT_OPEN_AR_ACCOUNT" value="COUNT_OPEN_AR_ACCOUNT"/>
+	  <element name="COUNT_OPEN_SR_PARTY_SITE_SHIP" value="COUNT_OPEN_SR_PARTY_SITE_SHIP"/>
+	  <element name="COUNT_OPEN_SR_PARTY_SITE_BILL" value="COUNT_OPEN_SR_PARTY_SITE_BILL"/>
+	  <element name="COUNT_OPEN_CONTRACT_BILL_TO" value="COUNT_OPEN_CONTRACT_BILL_TO"/>
+	  <element name="COUNT_OPEN_CONTRACT_SHIP_TO" value="COUNT_OPEN_CONTRACT_SHIP_TO"/>
+	  <element name="COUNT_OPEN_PROJECTS_BILL_TO" value="COUNT_OPEN_PROJECTS_BILL_TO"/>
+	  <element name="COUNT_OPEN_PROJECTS_SHIP_TO" value="COUNT_OPEN_PROJECTS_SHIP_TO"/>
+	  <element name="COUNT_IB_PARTY_SITE" value="COUNT_IB_PARTY_SITE"/>
+	  <element name="COUNT_IB_SHIP_TO" value="COUNT_IB_SHIP_TO"/>
+	  <element name="COUNT_IB_BILL_TO" value="COUNT_IB_BILL_TO"/>
+	  <element name="COUNT_IB_INSTALL_LOCATION" value="COUNT_IB_INSTALL_LOCATION"/>
+    </group>
+  </dataStructure>
+</dataTemplate>
