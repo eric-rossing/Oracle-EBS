@@ -1,0 +1,370 @@
+#####################################################################
+# XXHA_SHIP_NOTIF_USERPT.prog                                       #
+# ###################################################################
+# Description: Sends daily Ship Notif email
+# Modified:        Ver    Date          Modification
+# -------------------------------------------------------------------
+# Ohmesh Suraj     1.0    09-FEB-2016   Initial Creation                                                                  #
+#
+#####################################################################
+
+#!/usr/bin/ksh
+LOGIN=$1
+REQUEST_ID=$4
+EMAIL_ADDR=$5
+DATE_IN=$6
+SEARCH_STR="no rows selected"
+
+echo "Date: $DATE_IN"
+echo "email: $EMAIL_ADDR"
+
+if [[ -z ${DATE_IN} ]];then
+  DATE_STR="AND TRUNC(b.sent_date) =trunc(sysdate-1)" 
+  dt=`date --date yesterday "+%m%d%Y"`
+else
+  DATE_STR="AND TRUNC(b.sent_date) = trunc(to_date('${DATE_IN}','yyyy/mm/dd hh24:mi:ss'))"
+  dt=$$
+fi
+echo "Query string for date ${DATE_STR}"
+FILE_NAME=/tmp/SHIPNOTIFEXCEPACK${dt}.xls
+
+# if [[ `whoami|grep applprd |wc -l` -eq 0 ]]; then
+#    echo "non-production testing environment"
+#    echo "Hardcode email to internal user"
+#    if [[ ! -z ${EMAIL_ADDR} ]]; then 
+#      EMAIL_ADDR=ohmesh.suraj@Haemonetics.com
+#    fi
+# fi
+
+if [[ -z ${EMAIL_ADDR} ]]; then 
+  EMAIL_ADDR=eBSMailer-Test@Haemonetics.com
+  echo "Parameter Email Address is passed null so defaulted to $EMAIL_ADDR"
+fi
+
+
+MAIL_SUBJ="Ship Notification Daily Exception Report"
+MAIL_BODY="Exception Report is attached."
+#newly created for from email
+#MAIL_FROM="ohmesh.suraj@haemonetics.com"
+
+echo "Writing to file $FILE_NAME"
+
+RESULT=`sqlplus -s << EOF
+  $LOGIN
+  SET MARKUP HTML ON SPOOL ON PREFORMAT OFF ENTMAP ON
+  column ORDER_NUMBER HEADING 'Order'
+  column DELIVERY_ID HEADING 'Delivery'
+  column SENT_DATE HEADING 'Sent Date'
+  column STATUS HEADING 'Status'
+  column ERROR_MESSAGE HEADING 'Error Message'
+  column ORDER_DFF_EMAIL HEADING 'Email DFF'
+  column ORDER_DFF_FAX HEADING 'Fax DFF'
+  column CUSTOMER_NAME HEADING 'Customer Name'
+  column BILL_TO_CUST HEADING 'Bill to'
+  column BILL_TO_EMAIL HEADING 'Bill to Contact Email'
+  column SHIP_TO_CUST HEADING 'Ship to'
+  column SHIP_TO_EMAIL HEADING 'Ship to Contact Email'
+  SPOOL $FILE_NAME
+  --  
+  SELECT DISTINCT ORDER_NUMBER ,
+  delivery_id,
+  TO_CHAR(sent_date,'DD-Mon-YY HH:MI AM') sent_date,
+  NVL(a.status, 'Successfully Sent') Status,
+  error_message,
+  email order_dff_email,
+  fax order_dff_fax,
+  customer_name,
+  bill_to_cust,
+  ( SELECT DISTINCT hprel.EMAIL_ADDRESS EMAIL_ADDR
+  FROM apps.HZ_CUST_ACCOUNT_ROLES hcar,
+    apps.HZ_PARTIES hpsub,
+    apps.HZ_PARTIES hprel,
+    apps.HZ_ORG_CONTACTS hoc,
+    apps.HZ_RELATIONSHIPS hr,
+    apps.HZ_PARTY_SITES hps,
+    apps.FND_TERRITORIES_VL ftv
+  WHERE 1                                    =1
+  AND HCAR.CUST_ACCOUNT_ID                   = a.bill_cust_account_id
+  AND hcar.CUST_ACCT_SITE_ID                 = a.bill_cust_acct_site_id
+  AND hcar.ROLE_TYPE                         = 'CONTACT'
+  AND hcar.PARTY_ID                          = hr.PARTY_ID
+  AND hr.PARTY_ID                            = hprel.PARTY_ID
+  AND hr.SUBJECT_ID                          = hpsub.PARTY_ID
+  AND hoc.PARTY_RELATIONSHIP_ID              = hr.RELATIONSHIP_ID
+  AND hr.DIRECTIONAL_FLAG                    = 'F'
+  AND hps.PARTY_ID(+)                        = hprel.PARTY_ID
+  AND NVL(hps.IDENTIFYING_ADDRESS_FLAG, 'Y') = 'Y'
+  AND NVL(hps.STATUS, 'A')                   = 'A'
+  AND hprel.COUNTRY                          = ftv.TERRITORY_CODE(+)
+  AND UPPER(HOC.JOB_TITLE)                   = UPPER('Logistics')
+  AND HCAR.CUST_ACCT_SITE_ID                IS NOT NULL
+  AND HCAR.STATUS                            = 'A'
+  AND ROWNUM                                 =1
+  ) BILL_TO_EMAIL,
+  SHIP_TO_CUST,
+  (SELECT rtrim (xmlagg (xmlelement (col, hprel.EMAIL_ADDRESS || ', ')).extract ('//text()'), ', ')EMAIL_ADDR
+   --DISTINCT hprel.EMAIL_ADDRESS EMAIL_ADDR
+  FROM apps.HZ_CUST_ACCOUNT_ROLES hcar,
+    apps.HZ_PARTIES hpsub,
+    apps.HZ_PARTIES hprel,
+    apps.HZ_ORG_CONTACTS hoc,
+    apps.HZ_RELATIONSHIPS hr,
+    apps.HZ_PARTY_SITES hps,
+    apps.FND_TERRITORIES_VL ftv
+  WHERE 1                                    =1
+  AND HCAR.CUST_ACCOUNT_ID                   = a.cust_account_id
+  AND hcar.CUST_ACCT_SITE_ID                 = a.cust_acct_site_id
+  AND hcar.ROLE_TYPE                         = 'CONTACT'
+  AND hcar.PARTY_ID                          = hr.PARTY_ID
+  AND hr.PARTY_ID                            = hprel.PARTY_ID
+  AND hr.SUBJECT_ID                          = hpsub.PARTY_ID
+  AND hoc.PARTY_RELATIONSHIP_ID              = hr.RELATIONSHIP_ID
+  AND hr.DIRECTIONAL_FLAG                    = 'F'
+  AND hps.PARTY_ID(+)                        = hprel.PARTY_ID
+  AND NVL(hps.IDENTIFYING_ADDRESS_FLAG, 'Y') = 'Y'
+  AND NVL(hps.STATUS, 'A')                   = 'A'
+  AND hprel.COUNTRY                          = ftv.TERRITORY_CODE(+)
+  AND UPPER(HOC.JOB_TITLE)                   = UPPER('Logistics')
+  AND HCAR.CUST_ACCT_SITE_ID                IS NOT NULL
+  AND hcar.status                            = 'A'
+  ) ship_to_email
+FROM
+  (SELECT 
+    sent_date,
+    NVL(status, 'Successfully Sent') Status,
+    error_message,
+    DELIVERY_ID,
+    header_id,
+    line_id,
+    cert_flag,
+    email,
+    fax,
+    carrier,
+    carrier_url,
+    order_number,
+    cust_po_number,
+    schedule_ship_date,
+    tracking_number,
+    org_id,
+    line_number,
+    inventory_item,
+    revision,
+    lot_number,
+    ordered_item,
+    description,
+    SUM(shipped_quantity) shipped_quantity,
+    shipment_number,
+    ship_method,
+    ship_to_cust,
+    bill_to_cust,
+    customer_name,
+    party_id,
+    cust_account_id,
+    cust_acct_site_id,
+    bill_cust_account_id,
+    bill_cust_acct_site_id,
+    address1,
+    address2,
+    address3,
+    address4,
+    city,
+    state,
+    COUNTRY,
+    postal_code
+  FROM
+    (SELECT 
+      b.sent_date,
+      NVL(c.status, 'Successfully Sent') Status,
+      c.error_message,
+      DA.DELIVERY_ID,
+      ooh.header_id,
+      ool.line_id,
+      upper(ooh.attribute13) cert_flag,
+      ooh.attribute9 email,
+      ooh.attribute10 fax,
+      (SELECT wc.freight_code
+      FROM apps.WSH_CARRIERS wc
+      WHERE wc.carrier_id = nd.carrier_id
+      ) carrier,
+      (SELECT NVL(wc.attribute2,nd.attribute6)
+      FROM apps.WSH_CARRIER_SERVICES_V wc
+      WHERE wc.carrier_id    = nd.carrier_id
+      AND wc.ship_method_code=nd.ship_method_code
+      ) carrier_url,
+      OOH.ORDER_NUMBER,
+      OOH.CUST_PO_NUMBER,
+      TO_CHAR(OOL.SCHEDULE_SHIP_DATE,'MMDDYY') SCHEDULE_SHIP_DATE,
+      nd.waybill TRACKING_NUMBER,
+      dd.org_id,
+      OOL.LINE_NUMBER
+      ||'.'
+      ||OOL.SHIPMENT_NUMBER LINE_NUMBER,
+      msib.segment1 inventory_item,
+      dd.lot_number,
+      dd.revision,
+      ool.ordered_item,
+      MSIB.DESCRIPTION,
+      NVL(dd.SHIPPED_QUANTITY,OOL.SHIPPED_QUANTITY) SHIPPED_QUANTITY,
+      SHIP_SU.LOCATION SHIP_TO_CUST,
+      BILL_SU.location bill_to_cust,
+      hp.PARTY_NAME CUSTOMER_NAME,
+      HP.PARTY_ID,
+      hcasa.cust_account_id,
+      hcasa.cust_acct_site_id,
+      bill_hcasa.cust_account_id bill_cust_account_id,
+      bill_hcasa.cust_acct_site_id bill_cust_acct_site_id,
+      hl.address1,
+      hl.address2,
+      hl.address3,
+      hl.address4,
+      hl.city,
+      hl.state,
+      HL.COUNTRY,
+      HL.POSTAL_CODE,
+      ND.NAME SHIPMENT_NUMBER,
+      SHIP_METHOD.meaning ship_method
+    FROM apps.oe_order_headers_all ooh ,
+      apps.oe_order_lines_all ool ,
+      apps.FND_LOOKUP_VALUES SHIP_METHOD,
+      apps.wsh_delivery_details dd ,
+      apps.wsh_delivery_assignments da ,
+      APPS.WSH_NEW_DELIVERIES ND ,
+      apps.HZ_CUST_SITE_USES_ALL SHIP_SU ,
+      apps.hz_cust_acct_sites_all hcasa,
+      apps.hz_party_sites hps,
+      apps.HZ_PARTIES HP,
+      apps.hz_locations hl,
+      apps.MTL_SYSTEM_ITEMS_B MSIB,
+      apps.MTL_PARAMETERS MP,
+      apps.HR_OPERATING_UNITS OU,
+      apps.HZ_CUST_SITE_USES_ALL BILL_SU ,
+      apps.hz_cust_acct_sites_all bill_hcasa,
+      apps.hz_party_sites bill_hps,
+      apps.HZ_PARTIES bill_HP,
+        (SELECT DISTINCT request_date sent_date,
+          prg.USER_CONCURRENT_PROGRAM_NAME,
+          to_number(req.argument1) delivery_id
+        FROM APPS.FND_CONCURRENT_PROGRAMS_TL PRG,
+          APPS.FND_CONCURRENT_REQUESTS REQ
+        WHERE PRG.CONCURRENT_PROGRAM_ID      = REQ.CONCURRENT_PROGRAM_ID
+        AND PRG.LANGUAGE                     = 'US'
+        AND PRG.USER_CONCURRENT_PROGRAM_NAME = 'XXHA WMS Shipping Notification Program'
+        ) B,
+      (SELECT *  FROM
+        (SELECT 'Sending Failed' STATUS,
+          TO_CHAR(BE_DETAILS) ERROR_MESSAGE,
+          TO_NUMBER(SUBSTR(BE_DETAILS, 53,7)) DELIVERY_ID, be_date 
+        FROM XXHA_BE_SHIP_NOTIF_TAB
+        WHERE BE_DETAILS LIKE 'Exception occurred while sending email for Delivery:%' )
+      GROUP BY error_message,        delivery_id,        Status, be_date
+      ) c
+    WHERE 1                      =1
+    --AND  trunc(b.sent_date) > '03-FEB-2016' -- trunc(sysdate) -- to test from sql dev
+    $DATE_STR
+    AND DA.DELIVERY_ID = B.DELIVERY_ID
+    AND DA.DELIVERY_ID = c.delivery_id
+    AND OOH.HEADER_ID            = OOL.HEADER_ID
+    AND ool.shipping_method_code = ship_method.lookup_code(+)
+    AND SHIP_METHOD.LOOKUP_TYPE  = 'SHIP_METHOD'
+    AND SHIP_METHOD.LANGUAGE     = USERENV('LANG')
+    AND OOL.HEADER_ID            = DD.SOURCE_HEADER_ID
+    AND OOL.LINE_ID              = DD.SOURCE_LINE_ID
+    AND OOL.SHIP_FROM_ORG_ID     = mp.organization_id(+)
+    AND DD.DELIVERY_DETAIL_ID    = DA.DELIVERY_DETAIL_ID
+    AND DA.DELIVERY_ID           = ND.DELIVERY_ID
+    AND OOH.SHIP_TO_ORG_ID       = SHIP_SU.SITE_USE_ID(+)
+    AND SHIP_SU.SITE_USE_CODE    = 'SHIP_TO'
+    AND ship_su.status           = 'A'
+    AND dd.source_code           ='OE'
+    AND ship_su.cust_acct_site_id=hcasa.cust_acct_site_id
+    AND hcasa.party_site_id      =hps.party_site_id
+    AND hps.party_id             = hp.party_id
+    AND hps.location_id          =hl.location_id
+    AND SHIP_SU.org_id           = ou.organization_id(+)
+    AND OOH.invoice_TO_ORG_ID    = bill_SU.SITE_USE_ID(+)
+    AND BILL_SU.SITE_USE_CODE    = 'BILL_TO'
+    AND bill_su.status           = 'A'
+    AND bill_su.cust_acct_site_id=bill_hcasa.cust_acct_site_id
+    AND bill_hcasa.party_site_id =bill_hps.party_site_id
+    AND bill_hps.party_id        = bill_hp.party_id
+    AND OOL.INVENTORY_ITEM_ID    = MSIB.INVENTORY_ITEM_ID
+    AND OOL.SHIP_FROM_ORG_ID     = MSIB.ORGANIZATION_ID
+	--    AND DA.DELIVERY_ID          IN (6552708)
+    AND MSIB.INVENTORY_ITEM_FLAG ='Y'
+    ) AA
+  GROUP BY 
+    sent_date,
+    Status ,
+    error_message,
+    DELIVERY_ID,
+    header_id,
+    line_id,
+    cert_flag,
+    email,
+    fax,
+    carrier,
+    carrier_url,
+    order_number,
+    cust_po_number,
+    schedule_ship_date,
+    tracking_number,
+    org_id,
+    line_number,
+    inventory_item,
+    revision,
+    lot_number,
+    ordered_item,
+    description,
+    shipment_number,
+    ship_method,
+    ship_to_cust,
+    bill_to_cust,
+    customer_name,
+    party_id,
+    cust_account_id,
+    cust_acct_site_id,
+    bill_cust_account_id,
+    bill_cust_acct_site_id,
+    address1,
+    address2,
+    address3,
+    address4,
+    city,
+    state,
+    COUNTRY,
+    POSTAL_CODE
+  ) A
+WHERE 1           =1
+order by sent_date;
+  
+  SPOOL OFF;
+  QUIT;
+EOF`
+
+if [[ ! -e ${FILE_NAME} ]]; then
+  echo "ERROR : Unable to open file"
+   echo ${FILE_NAME}
+  exit 1
+fi
+
+#some substitution so it looks like a spreadsheet
+sed 's/SQL\*Plus Report/Ship Notification Exception Report/g' ${FILE_NAME}>/tmp/$$
+mv /tmp/$$ ${FILE_NAME}
+
+cp ${FILE_NAME} $APPLCSF/$APPLOUT/o$REQUEST_ID.out
+
+VALUE=`grep -w ${SEARCH_STR} ${FILE_NAME}`
+echo $VALUE
+
+if [ ! -z "$VALUE" ]
+then
+   echo "No rows selected"
+else
+	if [[ ! -z ${EMAIL_ADDR} ]]; then
+	  (echo -e "${MAIL_BODY}") | EMAIL=noreply@haemonetics.com mutt -a "${FILE_NAME}" -s "${MAIL_SUBJ}" "${EMAIL_ADDR}"
+	#  (echo -e "${MAIL_BODY}") | mailx -a "${FILE_NAME}" -s "${MAIL_SUBJ}" "${EMAIL_ADDR}" -f "ohm.suraj@haemonetics.com"
+	fi
+fi
+
+#Cleanup
+#rm ${FILE_NAME}
