@@ -1,0 +1,17 @@
+Create table HAE_cst_cogs_events_214261 as 
+select * from cst_cogs_events 
+where event_id = 3440157; 
+
+delete from cst_cogs_events 
+where event_id = 3440157; 
+
+update mtl_material_transactions mmt 
+set mmt.costed_flag = 'N', 
+mmt.request_id = NULL, 
+mmt.transaction_group_id = NULL, 
+mmt.transaction_set_id = null, 
+mmt.error_code = NULL, 
+mmt.error_explanation = NULL 
+where mmt.transaction_id = 366042624;
+
+commit;
