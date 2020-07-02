@@ -1,0 +1,39 @@
+Step#1 - Delete the Stuck record in MMTT and MTL_RESERVATIONS
+
+-- 1.0 CREATE BACK UP TABLES --
+
+create table rsi_mmtt_bk_213909 as
+select *
+from apps.mtl_material_transactions_temp
+where inventory_item_id = 2530
+and organization_id = 2721
+and transaction_temp_id = 366178929;
+
+create table rsi_mtl_res_bk_213909 as
+select *
+from apps.mtl_reservations
+where inventory_item_id = 2530
+and organization_id = 2721
+and reservation_id = 18954128
+and lot_number IS NULL;
+
+-- 2.0 DELETE RECORD -- 
+
+delete from apps.mtl_material_transactions_temp
+where inventory_item_id = 2530
+and organization_id = 2721
+and transaction_temp_id = 366178929;
+
+
+delete from apps.mtl_reservations
+where inventory_item_id = 2530
+and organization_id = 2721
+and reservation_id = 18954128
+and lot_number IS NULL;
+
+
+-- Only one record should be deleted after executing the above statements each, if Yes then COMMIT else ROLLBACK the changes
+
+-- 3.0 COMMIT THE CHANGES
+
+commit;
