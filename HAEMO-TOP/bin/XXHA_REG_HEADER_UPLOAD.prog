@@ -1,0 +1,175 @@
+#+=================================================================================+ 
+#|                        Haemonetics                          |
+#+=================================================================================+
+#|                                                                                 |
+#|    File Name:   XXHA_REG_HEADER_UPLOAD                                              |
+#|                                                                                 |
+#|    Description:   Shell script to load Regulatory header file to temporary table |      
+#|              using SQLLDR and invoking PLSQL package to perform data validation | 
+#|                 and finally inserting data into  Custom UI table|
+#|                                                                                 |
+#|                                                                                 |
+#|    Revision History:                                                            |
+#|                                                                                 |
+#|  Ver  Date       Name             Revision Description                            |
+#|  ===  =========  =============    ======================================          |
+#|                                                                              |
+#+=================================================================================+
+# -------------------------------
+# Declaration of dicrectory paths  
+# ------------------------------- 
+LOGIN_ID=$1
+v_user_id=$2
+REQUEST_ID=$4
+v_file_name=$5
+v_lookup_code=$6
+v_email_id=$7
+PROGRAM_STATUS=Y
+v_time_stamp="`date "+%Y%m%d_%H%M%S"`"
+#v_source=$8
+echo v_lookup_code  LOGIN_ID
+INTERFACE_NAME=$6
+CTL_DIR="$HAEMO_TOP/bin/XXHA_REG_HEADER_FILE.ctl"
+BASE_DIR=$HAEMO_TOP
+CONTROL_FILE=XXHA_REG_HEADER_FILE.ctl
+LOADER_DIR=$BASE_DIR/bin
+LOADER=$LOADER_DIR/$CONTROL_FILE
+LOG_DIR="$/interface/HAEPRD/reg/log"
+BAD_DIR="$/interface/HAEPRD/reg/bad"
+DIS_DIR="$/interface/HAEPRD/reg/dis"
+OUT_DIR="$/interface/HAEPRD/reg/out"
+v_time_stamp="`date "+%Y%m%d_%H%M%S"`"
+v_sql_badfile=0
+EXT=
+echo "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
+echo "Shellscript name             :"$0
+echo "Oracle username/password     :"$1
+echo "User_id                      :"$2
+echo "Oracle Applications username :"$3
+echo "Concurrent request id        :"$4
+echo "+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
+#Remove Previous Run Log,Bag,Discard files
+#MAIL_BODY='Please find attached the Log file and Output file of the XXHA REG Header Upload.'
+#MAIL_BODY_ERR='Please find attached Bad File of SQL Loader and Log and Output file of XXHA REG Header File Upload.'
+ INSTANCE=`sqlplus -s << EOF $LOGIN_ID
+               DELETE FROM XXHA_REG_COUNTRY_CONTROL_STG;
+               COMMIT;
+               exit;`
+ v_data_dir=`sqlplus -s $LOGIN_ID  <<END
+			set pagesize 0 feedback off verify off heading off echo off
+            set heading off;
+            SELECT directory_path FROM dba_directories WHERE directory_name ='XXHA_REG_COUNTRY_INBOUND';
+			exit;
+            END`
+echo "getting dir name"
+echo $v_data_dir
+v_data_dir1=`echo $v_data_dir | sed 's/ //g'`
+echo $v_data_dir1
+v_archive_dir=`sqlplus -s $LOGIN_ID  <<END
+				set pagesize 0 feedback off verify off heading off echo off
+               set heading off;
+               SELECT directory_path FROM dba_directories WHERE directory_name ='XXHA_REG_COUNTRY_ARCHIVE';
+			   EXIT
+               END` 
+v_archive_dir1=`echo $v_archive_dir | sed 's/ //g'` 
+v_user_name=`sqlplus -s $LOGIN_ID  <<END
+             set pagesize 0 feedback off verify off heading off echo off
+			 set heading off;
+             SELECT user_name FROM fnd_user WHERE user_id =$v_user_id;
+             exit;
+			 END`
+echo $v_archive_dir1
+# ---------------------------------------
+# Generating the batch id into v_batch_id   
+# --------------------------------------- 
+v_batch_id=`sqlplus -s $LOGIN_ID  <<END
+			set pagesize 0 feedback off verify off heading off echo off
+             set heading off;
+         SELECT XXHA_REG_COUNTRY_BATCH_ID_S.NEXTVAL FROM dual;
+		 exit;
+         END`
+v_batch_id=`echo $v_batch_id | sed 's/ //g'`
+BATCH_ID=$v_batch_id
+DATA_DIR=$v_data_dir1
+ARCHIVE_DIR=$v_archive_dir1
+echo $v_archive_dir1
+#Hard Coded for Testing Purpose
+# --------------------
+# SQL*Loader Variables
+# --------------------
+BAD_FILE=$DATA_DIR
+LOG_FILE=$DATA_DIR
+DIS_FILE=$DATA_DIR
+#echo "Changed LOG and BAD file directories"
+# -------------------
+# Get Parameter value
+# -------------------
+RETCODE=$?
+code_error=$RETCODE
+REQ_LOG=$APPLCSF/$APPLLOG/l$REQUEST_ID.req
+REQ_OUT=$APPLCSF/$APPLLOG/o$REQUEST_ID.out
+echo "\n=============================================================="
+echo "                              START                            "
+echo "                 XXHA REG Header Upload - Interface  "
+echo "==============================================================="
+# --------------------------------
+# Changing to data file directory
+# --------------------------------
+cd /interface/HAEPRD/Reg/In     #$DATA_DIR $v_data_dir1 #
+nb_data_file=`ls -1rt *.csv | wc -l`
+FILENAME=`echo $v_file_name | sed 's/ //g'`
+#V_FILENAME=`ls -ur $v_file_name | head -1`         
+echo " \n----------------------------------------------------"
+echo " Process begin for data file  :  "$FILENAME"file"
+echo " ----------------------------------------------------"
+v_sql_log_file=`echo $V_FILENAME`
+v_sql_bad_file=`echo $V_FILENAME`
+v_sql_dis_file=`echo $V_FILENAME`
+v_space_in_file=`echo $V_FILENAME | grep ".*\ .*" && echo "1" || echo "2"`
+#echo "Checking Spaces in uploaded file "$v_space_in_file
+#for FILE_NAME in `ls`
+       #do
+      #   FILE=`echo $FILE_NAME | cut -f1 -d'.'`
+#if 
+ FILE=`echo $FILE_NAME | cut -f1 -d'.'`
+ echo $file
+ #if [ -r $FILE_NAME ] ; then
+sqlldr $LOGIN_ID control=$CTL_DIR data=/interface/HAEPRD/Reg/In/$FILENAME  log=/interface/HAEPRD/Reg/In/$file.log bad=/interface/HAEPRD/Reg/In/$file.bad discard=/interface/HAEPRD/Reg/In/`echo $V_FILENAME`.dsc  #then
+                      echo "++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++"
+                      echo "Loader Uploaded the data file" $FILENAME  "Successfully"
+                      echo "Loader Uploaded the data file "$FILE_NAME" Successfully" #>> $OUT_DIR/summary.txt
+                      cat $file.log >> $REQ_LOG
+					  echo ''
+                      #Moving the data file to archive folder
+                      EXT='arc'
+					  # To move txt files from inbound to archive directory
+					  # cd $v_data_dir    #$DATA_DIR $v_data_dir1 #
+					   echo pwd
+					   echo "Renaming file $5 to $v_time_stamp_$REQUEST_ID_$5" 
+					   mv $FILENAME $v_time_stamp_$REQUEST_ID_$FILENAME
+					   echo "Moving file $v_time_stamp"_"$REQUEST_ID"_"$V_FILENAME to archive directory"
+					   #mv $v_time_stamp"_"$REQUEST_ID"_"$V_FILENAME $ARCHIVE_DIR
+					   mv *.csv $v_archive_dir1
+                      # cp $$FILENAME $FILE' '$YEAR'-'$MONTH'-'$DAY' '$HOUR':'$MINUTE':'$SEC.$EXT
+                      # mv $FILE' '$YEAR'-'$MONTH'-'$DAY' '$HOUR':'$MINUTE':'$SEC.$EXT $v_archive_dir1
+					  # rm $FILENAME
+                #  fi
+			#	fi	
+echo "batch id "$v_batch_id
+   prg_log=`sqlplus -s "$LOGIN_ID" <<!
+   SET TERM                OF
+   SET ECHO                OFF
+   SET HEADING             OFF
+   SET SHOW                
+   SET VERIFY              OFF
+   SET SERVEROUTPUT        ON SIZE 1000000
+   SET FEEDBACK            OFF
+   SET LINESIZE            260
+   spool $FCP_OUT
+   EXECUTE XXHA_REG_COUNTRY_DATA_PKG.MAIN_PROC($v_user_id,$REQUEST_ID,'$v_time_stamp_$V_FILENAME','REG',$BATCH_ID); 
+   spool off   
+   exit
+   !`
+ echo "Printing log of loading records"
+ echo ''
+# cat $FCP_OUT >>$REQ_LOG
