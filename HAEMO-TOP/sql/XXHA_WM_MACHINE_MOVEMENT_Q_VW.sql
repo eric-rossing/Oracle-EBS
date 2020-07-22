@@ -1,16 +1,16 @@
-CREATE OR REPLACE VIEW XXHA_WM_MACHINE_MOVEMENT_VW (WEB_TRANSACTION_ID, DOCUMENT_TYPE, DOCUMENT_STATUS, HEADER_ID, REQUEST_NUMBER, LINE_ID, LINE_NUMBER, ORGANIZATION_CODE, ITEM_NUMBER, REVISION, UOM_CODE,
+CREATE OR REPLACE VIEW xxha_wm_machine_movement_q_vw (WEB_TRANSACTION_ID, DOCUMENT_TYPE, DOCUMENT_STATUS, HEADER_ID, REQUEST_NUMBER, LINE_ID, LINE_NUMBER, ORGANIZATION_CODE, ITEM_NUMBER, REVISION, UOM_CODE,
 SERIAL_NUMBER_START, SERIAL_NUMBER_END, FROM_SUBINVENTORY_CODE, TO_SUBINVENTORY_CODE, STATUS_DATE, QUANTITY, HEADER_STATUS, DESCRIPTION, LOCATION_TYPE_CODE, LOCATION_ID, OLD_LOCATION_TYPE_CODE, OLD_LOCATION_ID,
 VENDOR_NUMBER, SITE_NUMBER, ADDRESS1, ADDRESS2, ADDRESS3, ADDRESS4, CITY, STATE, POSTAL_CODE, COUNTRY, ACTION, LINK_ID) AS
     SELECT
-        wmtc.web_transaction_id,
-        wmtc.transaction_type                                                                  document_type,
-        decode((wmtc.transaction_status), 0, 'UPDATE', 1, 'INSERT', 2, 'DELETE')               document_status,
+        NULL             web_transaction_id,
+        NULL             document_type,
+        NULL             document_status,
         mtrh.header_id,
         mtrh.request_number,
         mtrl.line_id,
         mtrl.line_number,
         org.organization_code,
-        msib.segment1                                                                          item_number,
+        msib.segment1    item_number,
         mtrl.revision,
         mtrl.uom_code,
         mtrl.serial_number_start,
@@ -35,8 +35,8 @@ VENDOR_NUMBER, SITE_NUMBER, ADDRESS1, ADDRESS2, ADDRESS3, ADDRESS4, CITY, STATE,
         hl.state,
         hl.postal_code,
         hl.country,
-        'PickUpRequest',
-        'PickUpRequest-' || to_char(CII_HIST.OLD_LOCATION_ID)
+        'PickupRequest',
+        'PickupRequest-' || TO_CHAR(CII_HIST.OLD_LOCATION_ID)
     FROM
         inv.mtl_txn_request_headers          mtrh,
         inv.mtl_txn_request_lines            mtrl,
@@ -58,19 +58,14 @@ VENDOR_NUMBER, SITE_NUMBER, ADDRESS1, ADDRESS2, ADDRESS3, ADDRESS4, CITY, STATE,
                         ) hist_row_num
                     FROM
                         csi.csi_item_instances_h
-                    WHERE
-                        new_location_type_code='INVENTORY'
                 )
             WHERE
                 hist_row_num = 1
         ) cii_hist,
         ar.hz_party_sites                    hps,
-        ar.hz_locations                      hl,
-        apps.wm_track_changes_vw             wmtc
+        ar.hz_locations                      hl
     WHERE
-            mtrh.header_id = wmtc.transaction_id
-        AND wmtc.transaction_type = 'HAEMO_MACHINEMOVE'
-        AND mtrh.header_id = mtrl.header_id
+            mtrh.header_id = mtrl.header_id
         AND mtrl.inventory_item_id = msib.inventory_item_id
         AND mtrl.organization_id = msib.organization_id
         AND mtrl.organization_id = org.organization_id
@@ -82,15 +77,15 @@ VENDOR_NUMBER, SITE_NUMBER, ADDRESS1, ADDRESS2, ADDRESS3, ADDRESS4, CITY, STATE,
         AND mtrl.organization_id = 5077
         AND mtrh.header_status = 3
         AND mtrl.serial_number_start IS NOT NULL
-        AND mtrh.description IS NOT NULL
+        AND mtrh.description IS NOT NULL        
         AND cii.instance_id is not null
 
 UNION
 
     SELECT
-        wmtc.web_transaction_id,
-        wmtc.transaction_type                                                                  document_type,
-        decode((wmtc.transaction_status), 0, 'UPDATE', 1, 'INSERT', 2, 'DELETE')               document_status,
+        NULL             web_transaction_id,
+        NULL             document_type,
+        NULL             document_status,
         mtrh.header_id,
         mtrh.request_number,
         mtrl.line_id,
@@ -129,12 +124,9 @@ UNION
         inv.mtl_system_items_b               msib,
         apps.org_organization_definitions    org,
         po_vendors pv,
-        po_vendor_sites_all pvsa,
-        apps.wm_track_changes_vw             wmtc
+        po_vendor_sites_all pvsa
     WHERE
-            mtrh.header_id = wmtc.transaction_id
-        AND wmtc.transaction_type = 'HAEMO_MACHINEMOVE'
-        AND mtrh.header_id = mtrl.header_id
+            mtrh.header_id = mtrl.header_id
         AND mtrl.inventory_item_id = msib.inventory_item_id
         AND mtrl.organization_id = msib.organization_id
         AND mtrl.organization_id = org.organization_id
@@ -145,13 +137,13 @@ UNION
         AND mtrh.header_status = 3
         AND mtrl.serial_number_start IS NOT NULL
         AND mtrh.description LIKE ('Deliver to %')
-
+        
 UNION
 
     SELECT
-        wmtc.web_transaction_id,
-        wmtc.transaction_type                                                                  document_type,
-        decode((wmtc.transaction_status), 0, 'UPDATE', 1, 'INSERT', 2, 'DELETE')               document_status,
+        NULL             web_transaction_id,
+        NULL             document_type,
+        NULL             document_status,
         mtrh.header_id,
         mtrh.request_number,
         mtrl.line_id,
@@ -190,12 +182,9 @@ UNION
         inv.mtl_system_items_b               msib,
         apps.org_organization_definitions    org,
         po_vendors pv,
-        po_vendor_sites_all pvsa,
-        apps.wm_track_changes_vw             wmtc
+        po_vendor_sites_all pvsa
     WHERE
-            mtrh.header_id = wmtc.transaction_id
-        AND wmtc.transaction_type = 'HAEMO_MACHINEMOVE'
-        AND mtrh.header_id = mtrl.header_id
+            mtrh.header_id = mtrl.header_id
         AND mtrl.inventory_item_id = msib.inventory_item_id
         AND mtrl.organization_id = msib.organization_id
         AND mtrl.organization_id = org.organization_id
@@ -206,13 +195,13 @@ UNION
         AND mtrh.header_status = 3
         AND mtrl.serial_number_start IS NOT NULL
         AND mtrh.description LIKE ('SCRAP')
-
+        
 UNION
 
     SELECT
-        wmtc.web_transaction_id,
-        wmtc.transaction_type                                                                  document_type,
-        decode((wmtc.transaction_status), 0, 'UPDATE', 1, 'INSERT', 2, 'DELETE')               document_status,
+        NULL             web_transaction_id,
+        NULL             document_type,
+        NULL             document_status,
         mtrh.header_id,
         mtrh.request_number,
         mtrl.line_id,
@@ -249,12 +238,9 @@ UNION
         inv.mtl_txn_request_headers          mtrh,
         inv.mtl_txn_request_lines            mtrl,
         inv.mtl_system_items_b               msib,
-        apps.org_organization_definitions    org,
-        apps.wm_track_changes_vw             wmtc
+        apps.org_organization_definitions    org
     WHERE
-            mtrh.header_id = wmtc.transaction_id
-        AND wmtc.transaction_type = 'HAEMO_MACHINEMOVE'
-        AND mtrh.header_id = mtrl.header_id
+            mtrh.header_id = mtrl.header_id
         AND mtrl.inventory_item_id = msib.inventory_item_id
         AND mtrl.organization_id = msib.organization_id
         AND mtrl.organization_id = org.organization_id
