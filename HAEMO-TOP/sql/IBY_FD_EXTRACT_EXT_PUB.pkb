@@ -16,6 +16,7 @@ create or replace PACKAGE BODY IBY_FD_EXTRACT_EXT_PUB
   * Eric Rossing       05-MAR-2019          INC0188852 - Fix for Payments with no payment date, improved date logging
   * Eric Rossing       31-JUL-2019          PRJTASK0017153 - Fix control totals in Get_Ins_Ext_Agg
   * Eric Rossing       19-NOV-2019          PRJTASK0017153 - Add SUA payment type
+  * Eric Rossing       11-AUG-2020          INC0324633 - Multiple Discount Dates fix
   *******************************************************************************************************/AS
   /* $Header: ibyfdxeb.pls 120.2 2006/09/20 18:52:12 frzhang noship $ */
   --
@@ -160,31 +161,40 @@ FND_FILE.PUT_LINE(FND_FILE.LOG, 'Invoice Due Date(v_due_date): ' || v_due_date);
   if v_due_date is null then
     v_us_pay_date := v_payment_date;
   else
-    select distinct 
-        case when apsa.discount_date>=ipa.payment_date then apsa.discount_date else null end discount_date, 
-        case when apsa.second_discount_date>=ipa.payment_date then apsa.second_discount_date else null end second_discount_date, 
-        case when apsa.third_discount_date>=ipa.payment_date then apsa.third_discount_date else null end third_discount_date
-    into v_first_disc_date, v_second_disc_date, v_third_disc_date
-    from apps.iby_payments_all ipa,
-        apps.iby_docs_payable_all idpa,
-        apps.ap_payment_schedules_all apsa
-    where ipa.payment_id=idpa.payment_id
-        and to_number(idpa.calling_app_doc_unique_ref2)=apsa.invoice_id
-        and ipa.payment_id = p_payment_id;
+    begin
+        select distinct 
+            case when apsa.discount_date>=ipa.payment_date then apsa.discount_date else null end discount_date, 
+            case when apsa.second_discount_date>=ipa.payment_date then apsa.second_discount_date else null end second_discount_date, 
+            case when apsa.third_discount_date>=ipa.payment_date then apsa.third_discount_date else null end third_discount_date
+        into v_first_disc_date, v_second_disc_date, v_third_disc_date
+        from apps.iby_payments_all ipa,
+            apps.iby_docs_payable_all idpa,
+            apps.ap_payment_schedules_all apsa
+        where ipa.payment_id=idpa.payment_id
+            and to_number(idpa.calling_app_doc_unique_ref2)=apsa.invoice_id
+            and ipa.payment_id = p_payment_id;
 FND_FILE.PUT_LINE(FND_FILE.LOG, 'First Discount Date(v_first_disc_date): ' || v_first_disc_date);
 FND_FILE.PUT_LINE(FND_FILE.LOG, 'Second Discount Date(v_second_disc_date): ' || v_second_disc_date);
 FND_FILE.PUT_LINE(FND_FILE.LOG, 'Third Discount Date(v_third_disc_date): ' || v_third_disc_date);
-    if nvl(v_first_disc_date,'01-JAN-2000')>=v_payment_date then
-        v_us_pay_date := v_first_disc_date;
-    elsif nvl(v_second_disc_date,'01-JAN-2000')>=v_payment_date then
-        v_us_pay_date := v_second_disc_date;
-    elsif nvl(v_third_disc_date,'01-JAN-2000')>=v_payment_date then
-        v_us_pay_date := v_third_disc_date;
-    elsif v_due_date>=v_payment_date then
-        v_us_pay_date := v_due_date;
-    else
-        v_us_pay_date := v_payment_date;
-    end if;
+        if nvl(v_first_disc_date,'01-JAN-2000')>=v_payment_date then
+            v_us_pay_date := v_first_disc_date;
+        elsif nvl(v_second_disc_date,'01-JAN-2000')>=v_payment_date then
+            v_us_pay_date := v_second_disc_date;
+        elsif nvl(v_third_disc_date,'01-JAN-2000')>=v_payment_date then
+            v_us_pay_date := v_third_disc_date;
+        elsif v_due_date>=v_payment_date then
+            v_us_pay_date := v_due_date;
+        else
+            v_us_pay_date := v_payment_date;
+        end if;
+    exception
+        when others then
+            v_us_pay_date := v_payment_date;
+            FND_FILE.PUT_LINE(FND_FILE.LOG, 'Error getting discount dates. Using payment date');
+            FND_FILE.PUT_LINE(FND_FILE.LOG, 'Error: ORA' || TO_CHAR(SQLCODE));
+            FND_FILE.PUT_LINE(FND_FILE.LOG, 'Error message: ' || SQLERRM);
+            v_us_pay_date := v_payment_date;
+    end;
   end if;
   v_us_payment_date := to_char(v_us_pay_date, 'YYYY-MM-DD');
 FND_FILE.PUT_LINE(FND_FILE.LOG, 'JPM Requested Execution Date(v_us_payment_date): ' || v_us_payment_date);
