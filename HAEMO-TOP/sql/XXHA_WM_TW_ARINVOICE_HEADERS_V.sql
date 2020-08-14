@@ -86,7 +86,8 @@
     RAA_REMIT_LOC.COUNTRY,
     XXHA_TW_INV_CHECK_DIGIT.PROCESS_DATA(LPAD(SUBSTR(ct.trx_number,3,8),8,'0')) CHECK_DIGIT,
     CASE WHEN OT.NAME LIKE '%Internal%' THEN '2' ELSE '1' END TW_TAX_TYPE,
-    CASE WHEN ct.interface_header_context = 'ORDER ENTRY' THEN wnd.attribute7 ELSE NULL END TW_CUSTOMS_CLEARANCE_MARK
+--    CASE WHEN ct.interface_header_context = 'ORDER ENTRY' THEN wnd.attribute7 ELSE NULL END TW_CUSTOMS_CLEARANCE_MARK
+    NULL TW_CUSTOMS_CLEARANCE_MARK -- always NULL until Intercompany question can be worked out
   FROM ra_customer_trx_all ct,
     ra_cust_trx_types_all cty,
     oe_order_headers_all oh,
